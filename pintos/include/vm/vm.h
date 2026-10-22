@@ -11,7 +11,7 @@ enum vm_type {
 	/* page that realated to the file */
 	VM_FILE = 2,
 	/* page that hold the page cache, for project 4 */
-	VM_PAGE_CACHE = 3,
+	VM_PAGE_CACHE = 3, /* Project 4용이라 지금은 무시해요. */
 
 	/* Bit flags to store state */
 
@@ -42,8 +42,8 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
 	const struct page_operations *operations;
-	void *va;              /* Address in terms of user space */
-	struct frame *frame;   /* Back reference for frame */
+	void *va;              /* 사용자 관점에서 주소 지정하기 */
+	struct frame *frame;   /* 프레임에 대한 뒤로 참조입니다 */
 
 	/* Your implementation */
 
@@ -70,9 +70,9 @@ struct frame {
  * Put the table of "method" into the struct's member, and
  * call it whenever you needed. */
 struct page_operations {
-	bool (*swap_in) (struct page *, void *);
-	bool (*swap_out) (struct page *);
-	void (*destroy) (struct page *);
+	bool (*swap_in) (struct page *, void *); /* 물리 메모리(RAM)에 있는 익명 페이지(Anonymous page) 등의 데이터를 보조기억장치(스왑 디스크 또는 스왑 영역)로 내보내는 작업입니다. */
+	bool (*swap_out) (struct page *); /* 스왑 디스크에 저장되어 있던 데이터 페이지를 다시 물리 메모리(RAM)로 불러오는 작업입니다. */
+	void (*destroy) (struct page *); /* 페이지나 자원, 또는 스왑 영역 자체를 완전히 해제하고 제거하는 단계입니다. */
 	enum vm_type type;
 };
 
