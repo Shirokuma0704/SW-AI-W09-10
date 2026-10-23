@@ -1,73 +1,100 @@
-# SW-AI-W08 · PintOS Project 2: User Programs
+<div align="center">
 
-크래프톤 정글 **Week8** 팀 레포예요 (๑•̀ㅂ•́)و
-KAIST PintOS의 **Project 2: User Programs**를 같이 구현해요. 기간은 2026-10-16(금)부터 10-22(목)까지예요.
+# SW-AI-W09-10 · PintOS Project 3: Virtual Memory
+
+크래프톤 정글 **Week 9–10** 팀 레포예요 (๑˃ᴗ˂)ﻭ
+KAIST PintOS의 **Project 3: Virtual Memory**를 2주 동안 같이 구현해요.
+
+![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=white)
+![x86-64](https://img.shields.io/badge/x86--64-QEMU-FF6600?style=flat-square&logo=qemu&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![KAIST PintOS](https://img.shields.io/badge/KAIST-PintOS-004191?style=flat-square)
+![Krafton Jungle](https://img.shields.io/badge/Krafton%20Jungle-Week%209--10-111111?style=flat-square)
+
+</div>
 
 ## 팀원
 
-| GitHub | 역할 |
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/Shirokuma0704"><img src="https://github.com/Shirokuma0704.png" width="80" alt="Shirokuma0704"/><br/><sub><b>Shirokuma0704</b></sub></a><br/><sub>메인 레포 관리</sub></td>
+    <td align="center"><a href="https://github.com/molru-1"><img src="https://github.com/molru-1.png" width="80" alt="molru-1"/><br/><sub><b>molru-1</b></sub></a><br/><sub>&nbsp;</sub></td>
+    <td align="center"><a href="https://github.com/kuk-hwan"><img src="https://github.com/kuk-hwan.png" width="80" alt="kuk-hwan"/><br/><sub><b>kuk-hwan</b></sub></a><br/><sub>&nbsp;</sub></td>
+  </tr>
+</table>
+
+레포를 포크한 계정 기준으로 적었어요. 역할은 PR로 채워 주세요.
+
+## 한눈에 보기
+
+| | |
 |---|---|
-| [Shirokuma0704](https://github.com/Shirokuma0704) | 메인 레포 관리 |
-| [1224kang](https://github.com/1224kang) | |
-| [minjun0307](https://github.com/minjun0307) | |
+| 기간 | 2026-10-23(금) ~ 11-05(목), 2주 |
+| 목표 | Project 3 테스트 통과 |
+| 구현할 것 | Lazy loading · Page fault 처리 · Supplemental Page Table · Swap in/out |
+| 키워드 | Virtual Memory · Page Table · Swap in/out · Page Replacement |
+| 주로 고칠 곳 | `pintos/vm/`, `pintos/userprog/` |
 
-레포를 포크한 계정 기준으로 적었어요. 빠진 분이나 역할은 PR로 채워 주세요.
+구현할 것과 키워드는 정글 과제 안내에 적힌 그대로 옮겼어요.
 
-## 이번 주 범위
+## 진행 현황
 
-- **이번 주**: 인자 전달(Argument Passing)부터 `fork` 직전까지예요.
-- **다음 주로 미룸**: `fork` / `exec` / `wait`는 Project 3(VM)에서 다시 크게 다뤄요. 그래서 다음 주에 제대로 끝내요 (10-16 코치님 말씀).
-- **Extra(`dup2`)**: 이번 주에는 하지 않아요.
+`pintos/vm/build`에서 `make check`를 돌린 결과로 채워요 (ง •̀_•́)ง
+배점은 `tests/vm/Grading`, 테스트 수는 각 `Rubric` 파일을 직접 세서 적었어요.
 
-## 숫자로 보는 Project 2
+| 묶음 | 테스트 | 배점 | 통과 |
+|---|---:|---:|---:|
+| VM 기능 (`tests/vm/Rubric.functionality`) | 27 | 60% | – |
+| VM 견고성 (`tests/vm/Rubric.robustness`) | 19 | 20% | – |
+| User Programs 기능 | 33 | 8% | – |
+| User Programs 견고성 | 30 | 5% | – |
+| File System base | 13 | 5% | – |
+| Threads alarm · priority | 18 | 2% | – |
+| **합계** | **140** | **100%** | – |
+| Extra: Copy-on-Write (`cow-simple`) | 1 | +25% | – |
+
+VM 테스트 46개를 이름 앞부분으로 나누면 이렇게 돼요.
 
 ```
-테스트          95개  = Project 2 77개 (userprog 63 + filesys 13 + multi-oom 1) + Project 1 18개
-채점 비중        기능 40% · 견고성 30% · 파일 시스템 15% · multi-oom 10% · Project 1 5%
-모범 답안 크기   파일 6개, +782 / -37 줄 (Extra 약 150줄 포함)
-고칠 곳         userprog/process.c, userprog/syscall.c 가 대부분
+mmap-*   25개
+pt-*      8개
+page-*    7개
+swap-*    4개
+lazy-*    2개
 ```
 
-모범 답안 크기는 KAIST 문서 FAQ에 나와 있어요. 테스트 개수와 비중은 `userprog/Make.vars`, `tests/userprog/Grading.no-extra`, `Rubric.*`를 직접 세서 적었어요.
+테스트 하나마다 이슈가 하나씩 있어요. 보드에서 테스트 이름으로 찾으면 돼요.
 
-## 링크
+## 일정
 
-- 보드: [krafton_jungle_week8_project](https://github.com/users/Shirokuma0704/projects/5)
-- 팀 위키(문서 한국어 요약): [SW-AI-W08 Wiki](https://github.com/Shirokuma0704/SW-AI-W08/wiki)
-- KAIST 원문: https://casys-kaist.github.io/pintos-kaist/
+| 날짜 | 일정 |
+|---|---|
+| 10-23(금) 13:00 | 핀토스 Project 3 기초 교육 |
+| 10-23 ~ 10-29 | 1주차: 집중 주간 |
+| 11-02(월) 13:30 | OS 강의 |
+| 11-03(화) 13:00 | 퀴즈 (PintOS + C, 예정) |
+| 11-05(목) 13:00 | 발표 (팀당 한 덱, 한 사람당 2분, 예정) |
 
-위키는 원문을 요약한 거예요. 처음 감 잡을 때 보고, 중요한 건 원문에서 다시 확인해 주세요 (｡•̀ᴗ-)✧
+"예정"이 붙은 칸은 아직 공지로 확정되지 않았어요.
+
+## 작업 원칙
+
+- 구현은 **AI 에이전트나 코드 생성에 기대지 않고 직접** 해요. 과제 안내에 있는 규칙이에요.
+- 1주차(10-23 ~ 10-29)는 반 전체가 **개념 공부까지 AI 없이** 해요.
+- 막히면 KAIST 원문, 강의, 팀원에게 먼저 물어봐요.
 
 ## 협업 규칙
 
-**Forking Workflow**로 일해요. 이 레포가 팀 공용 레포이고, 각자 포크해서 기능 브랜치에서 작업한 뒤 `develop`으로 PR을 보내요.
+아직 팀 합의 전이에요 (・ω・)
+[#5 팀 협업 룰/팁 정리 및 합의](https://github.com/Shirokuma0704/SW-AI-W09-10/issues/5)에서 정해지면 여기에 채워요.
 
-```
-이슈 → 보드 Todo → 담당자 지정 + 브랜치 → In Progress → 커밋/푸시 → PR (In Review) → 리뷰·테스트 → 머지 → 이슈 닫힘 → Done
-```
+## 링크
 
-| 대상 | 형식 | 예시 |
-|---|---|---|
-| 브랜치 | `<type>/<이슈번호>-<설명>` | `feature/9-args-single`, `fix/21-priority-donation` |
-| 커밋 | `<type>: <설명> (#이슈)` | `feat: 명령줄을 단어로 쪼개기 (#9)` |
-| PR 제목 | 커밋과 같은 모양 | `feat: 명령줄을 단어로 쪼개기 (#9)` |
+- 보드: [krafton_jungle_week9-10_project](https://github.com/users/Shirokuma0704/projects/6)
+- 팀 위키(문서 한국어 요약): [SW-AI-W09-10 Wiki](https://github.com/Shirokuma0704/SW-AI-W09-10/wiki)
+- KAIST 원문: https://casys-kaist.github.io/pintos-kaist/
 
-- 커밋 type은 `feat` / `fix` / `refactor` / `docs` / `chore` 중에서 골라요.
-- 커밋 하나에는 논리적인 변경 하나만 담아요. 이슈 번호는 꼭 붙여요.
-- PR 본문은 레포의 PR 템플릿을 채워요. 관련 이슈도 꼭 연결해요.
-- **`main`과 `develop`에는 직접 푸시하지 않아요.** PR로만 들어가요.
-- **머지는 22:00 코어타임에 다 같이 보고 해요.** 그 전에는 PR까지만 열어 둬요.
-- 이슈는 커밋이 아니라 **PR이 머지될 때** 닫혀요.
-- `thread.c`, `synch.c`처럼 같이 쓰는 파일을 바꾸면 자주 공유해요.
-- `develop`이 기본 브랜치이고, `main`은 완성본을 올리는 브랜치예요.
-
-## 하루 일정
-
-| 시간 | 할 일 |
-|---|---|
-| 10:00 스크럼 | 보드에서 오늘 할 이슈 고르기, 담당 정하기, 최신 `develop` 받기, In Progress로 옮기기 |
-| 16:00 중간 점검 | 진행 상황, 막힌 곳, 이슈 우선순위 다시 보기 |
-| 22:00 코어타임 | PR 리뷰와 테스트 결과 보기, 통과한 PR 머지, 이슈 닫기, 내일 계획 |
+위키는 원문을 요약한 거예요. 중요한 건 원문에서 다시 확인해 주세요.
 
 ## 빌드와 테스트
 
@@ -78,14 +105,14 @@ cd pintos
 source ./activate
 ```
 
-Project 2는 `userprog` 폴더에서 빌드하고 테스트해요.
+Project 3은 `vm` 폴더에서 빌드하고 테스트해요.
 
 ```bash
-cd pintos/userprog
+cd pintos/vm
 make
 cd build
-make check                                   # 전체 테스트
-make tests/userprog/args-single.result       # 테스트 하나
+make check                              # 전체 테스트
+make tests/vm/lazy-anon.result          # 테스트 하나
 ```
 
 - 테스트 하나를 돌리면 출력은 `.output`에, 판정은 `.result`에 저장돼요.
@@ -94,7 +121,7 @@ make tests/userprog/args-single.result       # 테스트 하나
 
 ## 개발 환경 (Docker)
 
-정글에서 준 Docker 환경(`ubuntu:22.04`, x86-64, qemu)을 그대로 써요 ( ˘ᵕ˘ )
+정글에서 준 Docker 환경(`ubuntu:22.04`, x86-64, qemu)을 그대로 써요 ( ˘ω˘ )
 
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop)을 설치하고 실행해요.
 2. 이 레포를 포크한 다음, 내 포크를 클론해요.
