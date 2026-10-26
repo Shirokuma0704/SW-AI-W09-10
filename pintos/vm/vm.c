@@ -3,9 +3,14 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "kernel/hash.h"
+#include "threads/thread.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
+uint64_t va_to_hash (const struct hash_elem *e, void *aux UNUSED);
+bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux UNUSED);
+
 void
 vm_init (void) {
 	vm_anon_init ();
@@ -62,9 +67,11 @@ err:
 
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+spt_find_page (struct supplemental_page_table *spt, void *va) {
+	struct page *page = va;
+
 	/* TODO: Fill this function. */
+	if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) page = NULL;
 
 	return page;
 }
@@ -75,7 +82,10 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	if (spt_find_page(spt, page) == NULL) {
+		struct hash_elem *result = hash_insert(&spt->page_tables, &page->hash_elem);
+		if (result != NULL) succ = true;
+	}
 	return succ;
 }
 
@@ -174,6 +184,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init(&spt->page_tables, va_to_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -187,4 +198,17 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+uint64_t va_to_hash (const struct hash_elem *e, void *aux UNUSED) {
+	const struct page *p = hash_entry(e, struct page, hash_elem);
+	return hash_bytes(p, sizeof(struct page));
+}
+
+bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux UNUSED) {
+	const struct page *ap = hash_entry(a, struct page, hash_elem);
+	const struct page *bp = hash_entry(b, struct page, hash_elem);
+
+	if (ap->va >= bp->va) return false;
+	return true;
 }
