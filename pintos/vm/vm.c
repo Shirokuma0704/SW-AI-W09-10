@@ -71,16 +71,16 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt, void *va) {
-	struct page *page = NULL;
-
-	page = vm_entry(spt,va);
+	struct page *page = malloc(sizeof(struct page));
 
 	/* TODO: Fill this function. */
-	if (page != NULL) {
-		if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) page = NULL;
+	page->va = va;
+	if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) {
+		free(page);
+		return NULL;
 	}
-
-	return page;
+	free(page);
+	return hash_entry(hash_find(&spt->page_tables, &page->hash_elem), struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -247,20 +247,20 @@ bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux U
 	// return &f->hash_elem;
 // }
 
-struct page *vm_entry (struct supplemental_page_table *spt, void *va) {
-		struct hash_iterator i;
-		bool find = false;
-		struct page *f = NULL;
-
-		hash_first (&i, &spt->page_tables);
-		while (hash_next (&i)) {
-			f = hash_entry (hash_cur (&i), struct page, hash_elem);
-			if (va == f->va) {
-				find = true;
-				break;
-			}
-		}
-
-		if (!find) return NULL;
-		return f;
-	}
+// struct page *vm_entry (struct supplemental_page_table *spt, void *va) {
+// 		struct hash_iterator i;
+// 		bool find = false;
+// 		struct page *f = NULL;
+//
+// 		hash_first (&i, &spt->page_tables);
+// 		while (hash_next (&i)) {
+// 			f = hash_entry (hash_cur (&i), struct page, hash_elem);
+// 			if (va == f->va) {
+// 				find = true;
+// 				break;
+// 			}
+// 		}
+//
+// 		if (!find) return NULL;
+// 		return f;
+// 	}
