@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "kernel/hash.h"
+#include "threads/mmu.h"
 #include "threads/thread.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -41,6 +42,8 @@ page_get_type (struct page *page) {
 static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
+// struct hash_elem *vm_to_hash_elem(struct supplemental_page_table *spt, void *va);
+struct page *vm_entry(struct supplemental_page_table *spt, void *va);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -68,10 +71,14 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt, void *va) {
-	struct page *page = va;
+	struct page *page = NULL;
+
+	page = vm_entry(spt,va);
 
 	/* TODO: Fill this function. */
-	if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) page = NULL;
+	if (page != NULL) {
+		if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) page = NULL;
+	}
 
 	return page;
 }
@@ -122,6 +129,8 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	frame = palloc_get_page(PAL_USER);
+	if (frame == NULL) ASSERT (frame == NULL); //TODO: victim 구현
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -162,7 +171,10 @@ vm_dealloc_page (struct page *page) {
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
+	struct thread *curr = thread_current();
+
 	/* TODO: Fill this function */
+	page = spt_find_page(&curr->spt, va);
 
 	return vm_do_claim_page (page);
 }
@@ -171,12 +183,15 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
+	struct thread *curr = thread_current();
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	bool result = pml4_set_page(curr->pml4,frame,page,true);
+	if (result == true) return result;
 
 	return swap_in (page, frame->kva);
 }
@@ -212,3 +227,40 @@ bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux U
 	if (ap->va >= bp->va) return false;
 	return true;
 }
+
+// struct hash_elem *
+	// vm_to_hash_elem(struct supplemental_page_table *spt, void *va) {
+	// struct hash_iterator i;
+	// bool find = false;
+	// struct page *f = NULL;
+
+	// hash_first (&i, &spt->page_tables);
+	// while (hash_next (&i)) {
+		// f = hash_entry (hash_cur (&i), struct page, hash_elem);
+		// if (va == f->va) {
+			// find = true;
+			// break;
+		// }
+	// }
+
+	// if (!find) return NULL;
+	// return &f->hash_elem;
+// }
+
+struct page *vm_entry (struct supplemental_page_table *spt, void *va) {
+		struct hash_iterator i;
+		bool find = false;
+		struct page *f = NULL;
+
+		hash_first (&i, &spt->page_tables);
+		while (hash_next (&i)) {
+			f = hash_entry (hash_cur (&i), struct page, hash_elem);
+			if (va == f->va) {
+				find = true;
+				break;
+			}
+		}
+
+		if (!find) return NULL;
+		return f;
+	}
