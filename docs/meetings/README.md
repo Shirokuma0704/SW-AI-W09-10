@@ -19,3 +19,4 @@ Project 3 기간 동안 한 회의를 여기에 모아요.
 | 2026-10-23 | SPT 자료구조 | [2026-10-23-spt-data-structure.md](2026-10-23-spt-data-structure.md) |
 | 2026-10-24 | SPT 공유 범위 | [2026-10-24-spt-scope.md](2026-10-24-spt-scope.md) |
 | 2026-10-26 | Memory Management 완성 | [2026-10-26-memory-management.md](2026-10-26-memory-management.md) |
+| 2026-10-27 | 소통과 공부 일정 | [2026-10-27-team-sync.md](2026-10-27-team-sync.md) |
