@@ -946,7 +946,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: lazy_load_segment에 정보를 넘길 수 있게 aux를 준비해요. */
-		void *aux = NULL;
+
+		struct aux {
+			struct file *file;
+			uint32_t read_bytes;
+			uint32_t zero_bytes;
+			off_t ofs;
+			uint8_t *upage;
+			bool writable;
+		};
+
+		struct aux *aux = malloc(sizeof(struct aux));
+		aux->file = file;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		aux->ofs = ofs;
+		aux->writable = writable;
+		aux->upage = upage;
+
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
@@ -955,6 +972,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += PGSIZE;
 	}
 	return true;
 }
