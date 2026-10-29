@@ -77,6 +77,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				initializer = file_backed_initializer;
 				break;
 			default:
+				/* 위에서 malloc한 p를 돌려주고 나가요. 안 그러면 아무도 가리키지 않는 채 남아요. */
+				free(p);
 				goto err;
 		}
 
@@ -86,9 +88,14 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		/* TODO: 페이지를 spt에 넣어요. */
 		/* 같은 va가 이미 있어서 못 넣으면 실패로 처리해요. */
-		if (spt_insert_page(spt, p) == false) goto err;
+		if (spt_insert_page(spt, p) == false) {
+			free(p);	// 넣지 못한 p도 돌려줘요
+			goto err;
+		}
+		/* 새로 등록했을 때만 성공이에요. */
+		return true;
 	}
-	return true;
+	/* upage가 이미 차지되어 있었거나, 위에서 실패했으면 여기로 와서 false예요. */
 	err:
 		return false;
 }
