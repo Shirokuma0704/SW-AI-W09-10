@@ -68,17 +68,20 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		switch (VM_TYPE(type)) {
 			case VM_ANON:
 				initializer = anon_initializer;
+				break;
 			case VM_FILE:
 				initializer = file_backed_initializer;
+				break;
 			default:
 				goto err;
 		}
 
-		uninit_new(p,&p,init,type,aux, initializer);
+		uninit_new(p,upage, init, type, aux, initializer);
 
 		/* TODO: 페이지를 spt에 넣어요. */
-		spt_insert_page(spt, p);
+		if (spt_insert_page(spt, p) == false) goto err;
 	}
+	return true;
 	err:
 		return false;
 }
@@ -90,12 +93,13 @@ spt_find_page (struct supplemental_page_table *spt, void *va) {
 
 	/* TODO: Fill this function. */
 	page->va = va;
-	if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) {
+	struct hash_elem *result = hash_find(&spt->page_tables, &page->hash_elem);
+	if (result == NULL) {
 		free(page);
 		return NULL;
 	}
 	free(page);
-	return hash_entry(hash_find(&spt->page_tables, &page->hash_elem), struct page, hash_elem);
+	return hash_entry(result, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -104,9 +108,9 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-	if (spt_find_page(spt, page) == NULL) {
+	if (spt_find_page(spt, page->va) == NULL) {
 		struct hash_elem *result = hash_insert(&spt->page_tables, &page->hash_elem);
-		if (result != NULL) succ = true;
+		if (result == NULL) succ = true;
 	}
 	return succ;
 }
@@ -232,7 +236,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 
 uint64_t va_to_hash (const struct hash_elem *e, void *aux UNUSED) {
 	const struct page *p = hash_entry(e, struct page, hash_elem);
-	return hash_bytes(p, sizeof(struct page));
+	return hash_bytes(&p->va, sizeof(p->va));
 }
 
 bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux UNUSED) {
