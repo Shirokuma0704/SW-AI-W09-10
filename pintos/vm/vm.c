@@ -60,25 +60,42 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: 페이지를 만들고, VM 타입에 따라 initializer를 가져오고,
 		 * TODO: 그다음 uninit_new를 불러서 "uninit" 페이지 구조체를 만들어요.
 		 * TODO: uninit_new를 부른 뒤에 필드를 수정해야 해요. */
+		/* 페이지 껍데기만 만들어요. 내용은 첫 페이지 폴트 때 채워요. */
 		struct page *p = malloc(sizeof(struct page));
 		if (p == NULL) goto err;
 
 		bool (*initializer)(struct page *, enum vm_type, void *);
 
+		/* 타입에 맞는 initializer를 골라요. 첫 폴트 때 uninit_initialize가 이걸 불러서
+		 * 페이지를 anon / file 페이지로 바꿔요.
+		 * case마다 break가 있어야 해요. 없으면 아래 case를 지나 default의 err까지 흘러내려 가요. */
 		switch (VM_TYPE(type)) {
 			case VM_ANON:
 				initializer = anon_initializer;
+				break;
 			case VM_FILE:
 				initializer = file_backed_initializer;
+				break;
 			default:
+				/* 위에서 malloc한 p를 돌려주고 나가요. 안 그러면 아무도 가리키지 않는 채 남아요. */
+				free(p);
 				goto err;
 		}
 
-		uninit_new(p,&p,init,type,aux, initializer);
+		/* 두 번째 인자가 이 페이지의 va가 돼요. SPT는 이 va로 페이지를 찾으니까 유저 주소 upage를 넣어요.
+		 * (&p를 넣으면 지역 변수 p의 커널 스택 주소가 들어가서, 모든 페이지의 va가 같아져요.) */
+		uninit_new(p,upage, init, type, aux, initializer);
 
 		/* TODO: 페이지를 spt에 넣어요. */
-		spt_insert_page(spt, p);
+		/* 같은 va가 이미 있어서 못 넣으면 실패로 처리해요. */
+		if (spt_insert_page(spt, p) == false) {
+			free(p);	// 넣지 못한 p도 돌려줘요
+			goto err;
+		}
+		/* 새로 등록했을 때만 성공이에요. */
+		return true;
 	}
+	/* upage가 이미 차지되어 있었거나, 위에서 실패했으면 여기로 와서 false예요. */
 	err:
 		return false;
 }
@@ -89,13 +106,16 @@ spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page *page = malloc(sizeof(struct page));
 
 	/* TODO: Fill this function. */
+	/* 찾기용 임시 page예요. 해시(va_to_hash)와 비교(page_less)가 va만 보니까 va만 채우면 돼요. */
 	page->va = va;
-	if (hash_find(&spt->page_tables, &page->hash_elem) == NULL) {
+	/* free하기 전에 결과를 받아 둬요. free한 page는 다시 건드리면 안 돼요. */
+	struct hash_elem *result = hash_find(&spt->page_tables, &page->hash_elem);
+	if (result == NULL) {
 		free(page);
 		return NULL;
 	}
 	free(page);
-	return hash_entry(hash_find(&spt->page_tables, &page->hash_elem), struct page, hash_elem);
+	return hash_entry(result, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -104,9 +124,11 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-	if (spt_find_page(spt, page) == NULL) {
+	/* 같은 va가 이미 있으면 넣지 않아요. 두 번째 인자는 va 값 그 자체예요 (&page->va가 아니라 page->va). */
+	if (spt_find_page(spt, page->va) == NULL) {
+		/* hash_insert는 넣는 데 성공하면 NULL을, 같은 원소가 이미 있으면 그 원소를 돌려줘요 (hash.c 주석). */
 		struct hash_elem *result = hash_insert(&spt->page_tables, &page->hash_elem);
-		if (result != NULL) succ = true;
+		if (result == NULL) succ = true;
 	}
 	return succ;
 }
@@ -214,6 +236,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	/* 스레드마다 SPT 해시 테이블을 하나씩 만들어요. 해시는 va_to_hash, 순서 비교는 page_less로 해요. */
 	hash_init(&spt->page_tables, va_to_hash, page_less, NULL);
 }
 
@@ -230,11 +253,16 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	 * TODO: writeback all the modified contents to the storage. */
 }
 
+/* SPT 해시 함수예요. va 값만 해시해요.
+ * page_less도 va만 비교하니까, 둘이 같은 기준이어야 같은 va가 같은 버킷에서 찾아져요.
+ * hash_bytes의 첫 인자는 "바이트가 놓인 곳"이라서 va의 주소인 &p->va를 넘겨요. */
 uint64_t va_to_hash (const struct hash_elem *e, void *aux UNUSED) {
 	const struct page *p = hash_entry(e, struct page, hash_elem);
-	return hash_bytes(p, sizeof(struct page));
+	return hash_bytes(&p->va, sizeof(p->va));
 }
 
+/* SPT 비교 함수예요. va가 작은 쪽이 앞이에요.
+ * 어느 쪽도 작지 않으면(va가 같으면) 해시 테이블은 같은 원소로 봐요. */
 bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux UNUSED) {
 	const struct page *ap = hash_entry(a, struct page, hash_elem);
 	const struct page *bp = hash_entry(b, struct page, hash_elem);
