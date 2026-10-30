@@ -43,7 +43,7 @@ static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 // struct hash_elem *vm_to_hash_elem(struct supplemental_page_table *spt, void *va);
-struct page *vm_entry(struct supplemental_page_table *spt, void *va);
+//struct page *vm_entry(struct supplemental_page_table *spt, void *va);
 
 /* initializer와 함께 대기 중인 페이지 객체를 만들어요. 페이지를 만들고 싶다면,
  * 직접 만들지 말고 이 함수나 `vm_alloc_page`를 통해 만드세요. */
@@ -164,14 +164,26 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
-	frame = palloc_get_page(PAL_USER);
-	if (frame == NULL) ASSERT (frame == NULL); //TODO: victim 구현
+	/* struct frame은 커널이 들고 다니는 관리 카드예요. 몇십 바이트라서 malloc으로 받아요.
+	 * (palloc으로 받으면 4KB를 통째로 쓰고, 유저 풀 칸도 하나 줄어요.) */
+	struct frame *frame = malloc(sizeof(struct frame));
+	if (frame == NULL)
+	{
+		goto err;
+	}
 
+	/* TODO: Fill this function. */
+	/* 실제 4KB 칸은 유저 풀에서 따로 받아서 kva에 담아요. 커널은 이 주소로 그 칸을 읽고 써요. */
+	frame->kva = palloc_get_page(PAL_USER);
+	/* malloc은 받은 메모리를 비워 주지 않아요. 아직 연결된 페이지가 없다는 걸 직접 적어 둬요. */
+	frame->page = NULL;
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
 	return frame;
+
+	err:
+		ASSERT("todo");
+		return NULL;
 }
 
 /* Growing the stack. */
@@ -192,6 +204,10 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	/* 폴트 주소는 페이지 중간일 수도 있어요. SPT 키는 페이지 시작 주소라서,
+	 * 아래 12비트를 지워(pg_round_down) 시작 주소로 내린 뒤에 찾아요. 예: 0x400a3c → 0x400000 */
+	uintptr_t *va = pg_round_down(addr);
+	page = spt_find_page(spt, va);
 
 	return vm_do_claim_page (page);
 }
@@ -227,7 +243,9 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	bool result = pml4_set_page(curr->pml4,frame,page,true);
+	/* 인자 순서는 (pml4, 유저 가상 주소, 커널 주소, 쓰기 가능)이에요. 이 페이지의 va를 프레임의 kva에 이어 줘요.
+	 * page->writable을 넘겨서 읽기 전용 페이지(코드 등)엔 쓰기를 막아요. */
+	bool result = pml4_set_page(curr->pml4,page->va,frame->kva, page->writable);
 	if (result == true) return result;
 
 	return swap_in (page, frame->kva);

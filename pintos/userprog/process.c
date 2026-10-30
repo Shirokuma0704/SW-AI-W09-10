@@ -987,6 +987,17 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: 성공하면 그에 맞게 rsp를 설정해요.
 	 * TODO: 그 페이지가 스택이라는 표시를 해 둬야 해요. */
 	/* TODO: 여기에 코드를 써요 */
+	/* VM_MARKER_0은 "이 페이지는 스택"이라는 표시예요.
+	 * 스택은 load가 곧바로 인자를 쌓아야 해서, 첫 폴트를 기다리지 않고 바로 claim 해요. */
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true) == true)
+	{
+		vm_claim_page(stack_bottom);
+		/* 스택은 아래로 자라요. push는 rsp를 먼저 빼고 그 자리에 쓰니까,
+		 * 페이지 꼭대기(stack_bottom + PGSIZE = USER_STACK)에서 출발해야 첫 push도 페이지 안에 들어가요. */
+		if_ -> rsp = (uintptr_t)stack_bottom + PGSIZE;
+		success = true;
+	}
+
 
 	return success;
 }
