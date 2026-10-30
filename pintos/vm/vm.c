@@ -43,7 +43,7 @@ static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 // struct hash_elem *vm_to_hash_elem(struct supplemental_page_table *spt, void *va);
-struct page *vm_entry(struct supplemental_page_table *spt, void *va);
+//struct page *vm_entry(struct supplemental_page_table *spt, void *va);
 
 /* initializer와 함께 대기 중인 페이지 객체를 만들어요. 페이지를 만들고 싶다면,
  * 직접 만들지 말고 이 함수나 `vm_alloc_page`를 통해 만드세요. */
@@ -164,14 +164,22 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
-	frame = palloc_get_page(PAL_USER);
-	if (frame == NULL) ASSERT (frame == NULL); //TODO: victim 구현
+	struct frame *frame = malloc(sizeof(struct frame));
+	if (frame == NULL)
+	{
+		goto err;
+	}
 
+	/* TODO: Fill this function. */
+	frame->kva = palloc_get_page(PAL_USER);
+	frame->page = NULL;
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
 	return frame;
+
+	err:
+		ASSERT("todo");
+		return NULL;
 }
 
 /* Growing the stack. */
@@ -227,7 +235,7 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	bool result = pml4_set_page(curr->pml4,frame,page,true);
+	bool result = pml4_set_page(curr->pml4,page->va,frame->kva, page->writable);
 	if (result == true) return result;
 
 	return swap_in (page, frame->kva);
