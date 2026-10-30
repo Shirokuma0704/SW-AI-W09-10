@@ -207,9 +207,34 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* 폴트 주소는 페이지 중간일 수도 있어요. SPT 키는 페이지 시작 주소라서,
 	 * 아래 12비트를 지워(pg_round_down) 시작 주소로 내린 뒤에 찾아요. 예: 0x400a3c → 0x400000 */
 	uintptr_t *va = pg_round_down(addr);
+	/* 스택 크기 한도예요. 이 프로젝트는 스택을 최대 1MB까지만 키워요 (위키 4절 "스택 크기 한도"). */
+	uintptr_t mb = (1 << 20);
+
+	/* 폴트 검증이에요. 아직 작성 중이에요.
+	 * 순서대로 ① 유저 폴트가 커널 주소를 건드렸는지, ② SPT에 없는 주소인지 (스택 확장 후보 자리),
+	 * ③ 읽기 전용 페이지에 쓰려고 했는지를 봐요. 걸리면 err로 가요. */
+	if (user == true && *va < (uintptr_t) KERN_BASE) goto err;
+
 	page = spt_find_page(spt, va);
 
+	if (page == NULL)
+	{
+		if (f->rsp - PGSIZE > *va && f->rsp - PGSIZE - mb > *va)
+			ASSERT("todo");
+		goto err;
+	}
+
+	if (write == true && page->writable != true) {
+		free(page);
+		goto err;
+	}
 	return vm_do_claim_page (page);
+
+	/* 검증에 걸린 폴트가 오는 곳이에요. 여기서 어떻게 처리할지는 아직 정하는 중이에요. */
+	err:
+	// kill?
+	ASSERT("INVALIDATE")
+	return NULL;
 }
 
 /* Free the page.
