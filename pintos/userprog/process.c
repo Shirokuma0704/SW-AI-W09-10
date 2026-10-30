@@ -915,6 +915,27 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: 파일에서 세그먼트를 불러와요 */
 	/* TODO: 이 함수는 주소 VA에서 첫 페이지 폴트가 났을 때 불려요. */
 	/* TODO: 이 함수를 부를 때 VA를 쓸 수 있어요. */
+	/* aux는 load_segment가 이 페이지용으로 만들어 둔 struct aux예요. */
+	struct aux *aux_r = aux;
+	/* 커널이 쓰는 곳은 page->va가 아니라 프레임의 kva예요.
+	 * va는 프로세스마다 가리키는 곳이 다른 유저 주소이고, kva는 이 프레임 하나만 가리키는 커널 주소라서요. */
+	uint8_t *kva = page->frame->kva;
+	/* 파일의 ofs 위치부터 read_bytes만큼 kva에 읽어 와요.
+	 * file_read_at은 파일의 현재 위치를 안 바꾸고, 지정한 위치에서 바로 읽어요. */
+	off_t bytes_read = file_read_at(
+		aux_r->file,
+		kva,
+		aux_r->read_bytes,
+		aux_r->ofs
+		);
+	/* 요청한 만큼 다 못 읽었으면 실패예요. */
+	if (bytes_read != aux_r->read_bytes)
+	{
+		return false;
+	}
+	/* 읽은 바로 뒤부터 페이지 끝까지는 0으로 채워요. */
+	memset(kva + aux_r->read_bytes, 0, aux_r->zero_bytes);
+	return true;
 }
 
 /* FILE의 오프셋 OFS에서 시작하는 세그먼트를 주소 UPAGE에
@@ -947,14 +968,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: lazy_load_segment에 정보를 넘길 수 있게 aux를 준비해요. */
 
-		struct aux {
-			struct file *file;
-			uint32_t read_bytes;
-			uint32_t zero_bytes;
-			off_t ofs;
-			uint8_t *upage;
-			bool writable;
-		};
 
 		struct aux *aux = malloc(sizeof(struct aux));
 		aux->file = file;
