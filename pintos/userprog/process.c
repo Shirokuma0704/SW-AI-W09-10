@@ -987,6 +987,13 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: 성공하면 그에 맞게 rsp를 설정해요.
 	 * TODO: 그 페이지가 스택이라는 표시를 해 둬야 해요. */
 	/* TODO: 여기에 코드를 써요 */
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true) == true)
+	{
+		vm_claim_page(stack_bottom);
+		if_ -> rsp = (uintptr_t)stack_bottom + PGSIZE;
+		success = true;
+	}
+
 
 	return success;
 }
