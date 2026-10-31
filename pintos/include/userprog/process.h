@@ -32,5 +32,17 @@ struct fork_args
     struct intr_frame *if_;         // 부모가 syscall로 들어올 때 쌓인 유저 문맥. parent->tf에는 이게 없어서 따로 넘겨요
 };
 
+/* load_segment가 페이지마다 하나씩 만들어서 lazy_load_segment에 넘기는 정보 묶음이에요.
+   페이지를 바로 읽지 않고 첫 폴트 때 읽으니까, 그때 "파일 어디서 몇 바이트"를 알 수 있게 미리 적어 둬요.
+   load_segment 안에 있던 정의를 헤더로 옮겼어요. lazy_load_segment에서도 같은 모양을 봐야 해서요. */
+struct aux {
+    struct file *file;              // 읽어 올 실행 파일
+    uint32_t read_bytes;            // 이 페이지에서 파일로 채울 바이트 수
+    uint32_t zero_bytes;            // 나머지를 0으로 채울 바이트 수 (read_bytes + zero_bytes = PGSIZE)
+    off_t ofs;                      // 파일 안에서 읽기 시작할 위치
+    uint8_t *upage;                 // 이 페이지의 유저 가상 주소
+    bool writable;                  // 유저가 이 페이지에 쓸 수 있는지
+};
+
 
 #endif /* userprog/process.h */
