@@ -84,9 +84,13 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		/* 두 번째 인자가 이 페이지의 va가 돼요. SPT는 이 va로 페이지를 찾으니까 유저 주소 upage를 넣어요.
 		 * (&p를 넣으면 지역 변수 p의 커널 스택 주소가 들어가서, 모든 페이지의 va가 같아져요.) */
-		uninit_new(p,upage, init, type, aux, initializer);
+		/* 페이지의 기본 상태와 초기화에 필요한 정보를 설정한다. */
+		uninit_new(p, upage, init, type, aux, initializer);
 
 		/* TODO: 페이지를 spt에 넣어요. */
+		/* 요청받은 페이지의 쓰기 권한을 저장한다. */
+		p->writable = writable;
+
 		/* 같은 va가 이미 있어서 못 넣으면 실패로 처리해요. */
 		if (spt_insert_page(spt, p) == false) {
 			free(p);	// 넣지 못한 p도 돌려줘요
@@ -268,10 +272,15 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	/* 인자 순서는 (pml4, 유저 가상 주소, 커널 주소, 쓰기 가능)이에요. 이 페이지의 va를 프레임의 kva에 이어 줘요.
 	 * page->writable을 넘겨서 읽기 전용 페이지(코드 등)엔 쓰기를 막아요. */
-	bool result = pml4_set_page(curr->pml4,page->va,frame->kva, page->writable);
-	if (result == true) return result;
+	bool result = pml4_set_page(
+		curr->pml4, page->va, frame->kva, page->writable
+	);
 
-	return swap_in (page, frame->kva);
+	/* 주소 연결에 실패했다면 false를 반환하고 종료한다. */
+	if (result == false)
+		return result;
+
+	return swap_in(page, frame->kva);
 }
 
 /* Initialize new supplemental page table */
