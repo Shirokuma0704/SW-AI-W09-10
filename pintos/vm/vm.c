@@ -209,21 +209,28 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	/* 폴트 주소는 페이지 중간일 수도 있어요. SPT 키는 페이지 시작 주소라서,
-	 * 아래 12비트를 지워(pg_round_down) 시작 주소로 내린 뒤에 찾아요. 예: 0x400a3c → 0x400000 */
-	uintptr_t *va = pg_round_down(addr);
+	 * 아래 12비트를 지워(pg_round_down) 시작 주소로 내린 뒤에 찾아요. 예: 0x400a3c → 0x400000
+	 * va는 포인터가 아니라 주소 "값"으로 들고 있어요. 포인터로 두고 *va를 하면 그 주소의 "내용"을 읽게 돼요.
+	 * 아직 안 올라온 페이지라 핸들러 안에서 폴트가 한 번 더 나고, 같은 페이지를 두 번 claim해요.
+	 * (11-02 args-none: 두 번째 claim이 빈 프레임을 덮어 매핑해서 _start가 0으로 채워져 있었어요.) */
+	uintptr_t va = (uintptr_t) pg_round_down(addr);
 	/* 스택 크기 한도예요. 이 프로젝트는 스택을 최대 1MB까지만 키워요 (위키 4절 "스택 크기 한도"). */
 	uintptr_t mb = (1 << 20);
 
 	/* 폴트 검증이에요. 아직 작성 중이에요.
 	 * 순서대로 ① 유저 폴트가 커널 주소를 건드렸는지, ② SPT에 없는 주소인지 (스택 확장 후보 자리),
 	 * ③ 읽기 전용 페이지에 쓰려고 했는지를 봐요. 걸리면 err로 가요. */
-	if (user == true && *va < (uintptr_t) KERN_BASE) goto err;
+	/* ① 유저 프로그램의 주소는 모두 KERN_BASE 아래에 있어요 (코드는 0x400000부터, lib/user/user.lds).
+	 * 그래서 유저 폴트인데 주소가 KERN_BASE보다 크면 유저가 커널 영역을 건드린 거라 err로 보내요. */
+	if (user == true && va > (uintptr_t) KERN_BASE) goto err;
 
-	page = spt_find_page(spt, va);
+	/* ② SPT에서 찾을 때는 va 값을 그대로 넘겨요. &va를 넘기면 지역 변수 va가 놓인 커널 스택 주소로
+	 * 찾게 돼서 항상 NULL이 나와요 (uninit_new 쪽 &p 주석과 같은 함정이에요). */
+	page = spt_find_page(spt, (void *)va);
 
 	if (page == NULL)
 	{
-		if (f->rsp - PGSIZE > *va && f->rsp - PGSIZE - mb > *va)
+		if (f->rsp - PGSIZE > va && f->rsp - PGSIZE - mb > va)
 			ASSERT("todo");
 		goto err;
 	}
