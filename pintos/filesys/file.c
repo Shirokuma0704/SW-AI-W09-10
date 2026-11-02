@@ -4,20 +4,15 @@
 #include "threads/malloc.h"
 
 /* An open file. */
-struct file{
+struct file {
 	struct inode *inode;        /* File's inode. */
 	off_t pos;                  /* Current position. */
 	bool deny_write;            /* Has file_deny_write() been called? */
 };
 
-/* 주어진 INODE에 해당하는 파일을 열고, 새로 생성된 파일 객체를 반환합니다.
-
-이때 INODE의 소유권(ownership)을 가져옵니다.
-
-다음 경우에는 NULL 포인터를 반환합니다.
-- 메모리 할당에 실패한 경우
-- 전달받은 INODE가 NULL인 경우
-*/
+/* Opens a file for the given INODE, of which it takes ownership,
+ * and returns the new file.  Returns a null pointer if an
+ * allocation fails or if INODE is null. */
 struct file *
 file_open (struct inode *inode) {
 	struct file *file = calloc (1, sizeof *file);
@@ -63,21 +58,17 @@ file_close (struct file *file) {
 	}
 }
 
-/* FILE이 내부적으로 가지고 있는 inode를 반환합니다. */
+/* Returns the inode encapsulated by FILE. */
 struct inode *
 file_get_inode (struct file *file) {
 	return file->inode;
 }
 
-/* FILE의 현재 위치부터 시작하여
- * SIZE바이트의 데이터를 읽어 BUFFER에 저장합니다.
- *
- * 실제로 읽은 바이트 수를 반환합니다.
- * 파일의 끝(EOF)에 도달하면 실제로 읽은 바이트 수가
- * SIZE보다 작을 수 있습니다.
- *
- * 읽은 바이트 수만큼 FILE의 현재 위치를 이동시킵니다.
- */
+/* Reads SIZE bytes from FILE into BUFFER,
+ * starting at the file's current position.
+ * Returns the number of bytes actually read,
+ * which may be less than SIZE if end of file is reached.
+ * Advances FILE's position by the number of bytes read. */
 off_t
 file_read (struct file *file, void *buffer, off_t size) {
 	off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
@@ -95,18 +86,13 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) {
 	return inode_read_at (file->inode, buffer, size, file_ofs);
 }
 
-/* FILE의 현재 위치부터 시작하여
- * BUFFER에서 SIZE바이트의 데이터를 FILE에 기록합니다.
- *
- * 실제로 기록한 바이트 수를 반환합니다.
- * 파일의 끝(EOF)에 도달하면 실제로 기록한 바이트 수가
- * SIZE보다 작을 수 있습니다.
- *
- * (일반적으로 이런 경우 파일 크기를 확장하지만,
- * 아직 파일 크기 확장 기능이 구현되어 있지 않습니다.)
- *
- * 읽은 바이트 수만큼 FILE의 현재 위치를 이동시킵니다.
- */
+/* Writes SIZE bytes from BUFFER into FILE,
+ * starting at the file's current position.
+ * Returns the number of bytes actually written,
+ * which may be less than SIZE if end of file is reached.
+ * (Normally we'd grow the file in that case, but file growth is
+ * not yet implemented.)
+ * Advances FILE's position by the number of bytes read. */
 off_t
 file_write (struct file *file, const void *buffer, off_t size) {
 	off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);

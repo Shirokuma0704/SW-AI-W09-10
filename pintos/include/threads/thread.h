@@ -5,7 +5,6 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
-#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -28,9 +27,6 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
-bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
-void priority_thread_yield(void);
 
 /* A kernel thread or user process.
  *
@@ -97,31 +93,7 @@ struct thread {
 	int priority;                       /* Priority. */
 
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;
-	struct list_elem sleep_elem;		/* List element(연결 리스트 형태). */
-
-	int my_priority;					// 내 우선순위 보존용
-	struct list donation_list;			// 기부받은 스레드 목록
-	struct lock *lock_to_stop;			// 어떤 lock때문에 멈춰 있는지
-	struct list_elem donation_elem;		// 다른 스레드의 기부해준 스레드 목록에 들어가기 위함 
-
-	int nice;							// nice 정의 (다른 스레드에게 얼마나 양보적인지)(범위는 -20 ~ 20)
-	int recent_cpu;						// recent_cpu 정의 (각 프로세스가 최근에 cpu 시간을 얼마나 사용했는지)
-	struct list_elem allelem;			// all_list에 넣기 위함
-
-	/* process_wait용 (#113) */
-	struct list child_record_list;		// 내가 만든 자식들의 기록(struct record) 목록. 안에 든 건 thread가 아니라 기록이에요
-	struct thread *parents;				// 나를 만든 부모. 부모가 먼저 끝나면 NULL(고아 표시)이 돼요
-	bool exit_called;					// SYS_EXIT로 끝났으면 true. false면 예외로 죽은 거라 종료 코드를 -1로 봐요
-	int exit_status;					// exit()에 넘긴 종료 코드
-
-	struct fd_table *fdt;
-	struct file *running_file;			// 지금 실행 중인 프로그램 파일 (rox, #115). 쓰기 금지를 건 바로 그 struct file이라야 풀 수 있어서 들고 있어요
-
-	/* fork용 (#111). 둘 다 부모 쪽 칸이에요 */
-	struct semaphore fork_sema;			// 부모가 fork 안에서 자식의 복제가 끝날 때까지 잠드는 세마포어. 자식이 up해서 깨워요
-	tid_t fork_result;					// 자식이 적어 주는 fork 결과. 성공이면 자식 tid, 실패면 TID_ERROR
-
+	struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -131,33 +103,16 @@ struct thread {
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
 #endif
-	int64_t timer_tick;
 
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 };
 
-struct fd_table {
-	struct list fd_list; //해당 프로세스가 열어둔 파일들의 목록
-	int next_fd_index; //다음에 할당받을 fd index
-};
-
-struct file_fd_mapping{
-	int index; //파일에 할당된 fd 번호
-	struct file *mapping_file; //매핑된 실제 파일 포인터 
-	struct list_elem file_fd_elem; //fd_list에 연결하기 위한 고리
-};
-
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-// 커널 옵션으로 -mlfqs를 전달하면 thread_mlfqs가 true로 설정됨. 기본값은 false
-// thread_mlfqs가 false이면, 우선순위 스케줄러 + 기부(Donation) 방식으로 작동함
-// thread_mlfqs가 true이면 MLFQS(다단계 피드백 큐 스케줄러)방식으로 작동함
 extern bool thread_mlfqs;
-
-extern int load_avg;					// load_avg 정의
 
 void thread_init (void);
 void thread_start (void);
@@ -186,19 +141,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void mlfqs_calculate_priority (struct thread *t);
-void mlfqs_calculate_recent_cpu (struct thread *t);
-void mlfqs_calculate_load_avg (void);
-void mlfqs_increment_recent_cpu (void);
-void mlfqs_recalculate_all_priority (void);
-void mlfqs_recalculate_all_recent_cpu (void);
-
 void do_iret (struct intr_frame *tf);
-/* 자식 기록 리스트와 parent 포인터를 지키는 전역 락이에요. 본체는 thread.c에 하나만 있어요.
-   리스트에 넣고 빼는 곳, 자식이 부모 리스트를 도는 곳은 모두 이 락 안에서 해요. */
-extern struct lock process_lock;
-
-/* fd 테이블 초기화. 본체는 thread.c에 있고 process.c에서도 불러서 여기에 선언해 둬요 (#146) */
-void fd_table_init(struct fd_table *t);
 
 #endif /* threads/thread.h */

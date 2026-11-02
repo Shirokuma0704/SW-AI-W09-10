@@ -28,10 +28,6 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
-static bool incert_sleep (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-
-static struct list sleep_list;
-
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -45,7 +41,6 @@ timer_init (void) {
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
-	list_init (&sleep_list);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -96,18 +91,10 @@ timer_elapsed (int64_t then) {
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
-	int64_t awake_ticks = start + ticks;
 
 	ASSERT (intr_get_level () == INTR_ON);
-	thread_current()->timer_tick = awake_ticks;
-
-	if (timer_elapsed (start) < ticks)
-	{
-		enum intr_level old_level = intr_disable();
-		list_insert_ordered(&sleep_list, &thread_current()->sleep_elem, incert_sleep, NULL);
-		thread_block();
-		intr_set_level (old_level);
-	}
+	while (timer_elapsed (start) < ticks)
+		thread_yield ();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -138,30 +125,7 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	while (list_empty (&sleep_list) != true && list_entry(list_front(&sleep_list), struct thread, sleep_elem)->timer_tick <= ticks)
-	{
-		thread_unblock(list_entry(list_pop_front(&sleep_list), struct thread, sleep_elem));
-	}
 	thread_tick ();
-
-	if (thread_mlfqs) {
-	    // 1틱마다 실행 중인 스레드의 recent_cpu 증가
-    	mlfqs_increment_recent_cpu ();
-
-	    // 100틱(1초)마다: load_avg 먼저 계산 -> 그 다음 recent_cpu 전체 갱신 
-    	if (timer_ticks () % TIMER_FREQ == 0) {
-       		mlfqs_calculate_load_avg ();
-        	mlfqs_recalculate_all_recent_cpu ();
-    	}
-
-	    // 4틱마다: recent_cpu가 반영된 최신 priority 전체 갱신 
-		// recent_cpu가 반영되어야 하기에 mlfqs_reculate_all_recent_cpu() 이후에
-		// mlfqs_recalculate_all_priority()가 실행되어야 함
-    	if (timer_ticks () % 4 == 0) {
-        	mlfqs_recalculate_all_priority ();
-    	}
-	}
-
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -219,13 +183,4 @@ real_time_sleep (int64_t num, int32_t denom) {
 		ASSERT (denom % 1000 == 0);
 		busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 	}
-}
-
-static bool incert_sleep (const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
-{
-	int64_t a_tick = list_entry(a, struct thread, sleep_elem)->timer_tick;
-	int64_t b_tick = list_entry(b, struct thread, sleep_elem)->timer_tick;
-
-	if (a_tick < b_tick) return true;
-	return false;
 }
