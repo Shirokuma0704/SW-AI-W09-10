@@ -4,6 +4,7 @@
 #include "devices/disk.h"
 #include "threads/vaddr.h" /* PGSIZE 정의 */
 #include <string.h> /* memset() 선언 */
+#include "threads/malloc.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -58,4 +59,6 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+
+	free(page->frame);
 }
