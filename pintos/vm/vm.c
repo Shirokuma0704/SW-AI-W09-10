@@ -6,6 +6,8 @@
 #include "kernel/hash.h"
 #include "threads/mmu.h"
 #include "threads/thread.h"
+#include "userprog/process.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -301,6 +303,92 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	/* __do_fork 안에서 자식 스레드가 불러요. 그래서 curr는 자식이고, src가 부모 SPT예요. */
+	struct thread *curr = thread_current();
+	struct thread *parents = curr->parents;
+
+	/* 1단계: 부모 SPT를 한 바퀴 돌면서 va를 모아 둬요. */
+	size_t hash_count = hash_size(&src->page_tables);
+	uintptr_t *va[hash_count];
+
+	struct hash_iterator i;
+	hash_first (&i, &src->page_tables);
+
+	int n = 0;
+	while (hash_next (&i)) {
+		struct page *p = hash_entry (hash_cur (&i), struct page, hash_elem);
+		va[n] = p->va;
+		n++;
+	}
+
+	/* 2단계: 모아 둔 va로 부모 page를 하나씩 찾아서 자식 page를 만들어요. */
+	for (size_t x = 0; x != hash_count; x++) {
+		/* 자식 page로 쓸 구조체예요. 먼저 va만 채워서 부모 SPT를 찾는 검색 키로 써요. */
+		struct page *insert_page = malloc(sizeof(struct page));
+		insert_page->va = va[x];
+		struct page *p = hash_entry (hash_find(&src->page_tables, &insert_page->hash_elem), struct page, hash_elem);
+
+		/* 부모 page를 통째로 복사해요. va, writable, operations는 그대로 쓰고,
+		 * aux와 frame은 아래 switch에서 자식 것으로 바꿔요. */
+		insert_page = memcpy(insert_page, p, sizeof(struct page));
+
+		switch (VM_TYPE(p->operations->type)) {
+
+			/* 아직 첫 폴트가 안 난 페이지예요. 내용은 자식이 첫 폴트 때 lazy_load_segment로 읽어요.
+			 * aux는 자식 몫을 새로 받아요. 부모 aux를 같이 가리키면 두 쪽이 각자 첫 폴트 때 같은 aux를 free해요.
+			 * 파일은 자식의 running_file을 빌려요. 부모 것은 부모가 먼저 끝나면 process_exit에서 닫혀요. */
+			case VM_UNINIT:
+				insert_page->uninit.aux = malloc(sizeof(struct aux));
+
+				memcpy(insert_page->uninit.aux, p->uninit.aux, sizeof(struct aux));
+
+				struct aux *aux = insert_page->uninit.aux;
+				aux->file = curr->running_file;
+				break;
+
+			/* 이미 내용이 올라온 페이지예요. 자식 프레임을 새로 받고, 부모 칸 내용을 복사하고, 자식 pml4에 매핑해요.
+			 * vm_do_claim_page를 쓰지 않는 건 그 끝의 swap_in이 내용을 스왑에서 채우려 하기 때문이에요. 여기선 memcpy가 채워요.
+			 * frame을 자식 것으로 바꾼 뒤에 memcpy해요. 통째 복사 직후의 insert_page->frame은 아직 부모 frame이에요.
+			 * 부모 페이지가 스왑으로 나가 있어서 frame이 없는 경우는 6절에서 다뤄요. */
+			case VM_ANON:
+				struct frame *fa = vm_get_frame();
+				if (fa == NULL)
+					PANIC("TODO");
+
+				insert_page->frame = fa;
+				fa->page = insert_page;
+
+				memcpy(insert_page->frame->kva, p->frame->kva, PGSIZE);
+
+				if (pml4_set_page(curr->pml4, insert_page->va, fa->kva, insert_page->writable) == false)
+					return false;
+
+				break;
+
+			/* mmap(5절)이 아직 없어서 지금은 VM_FILE 페이지가 생기지 않아요. ANON과 같은 방식으로 두었고,
+			 * 내용을 파일에서 다시 읽을지, 파일을 빌릴지 복제할지 같은 건 5절에서 다시 정해요. */
+			case VM_FILE:
+				struct frame *ff = vm_get_frame();
+				if (ff == NULL)
+					PANIC("TODO");
+
+				insert_page->frame = ff;
+				ff->page = insert_page;
+
+				memcpy(insert_page->frame->kva, p->frame->kva, PGSIZE);
+
+				if (pml4_set_page(curr->pml4, insert_page->va, ff->kva, insert_page->writable) == false)
+					return false;
+				break;
+
+			default:
+				return false;
+		}
+
+		spt_insert_page(dst, insert_page);
+	}
+	return true;
+
 }
 
 /* Free the resource hold by the supplemental page table */
