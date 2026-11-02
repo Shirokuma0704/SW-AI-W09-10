@@ -225,16 +225,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 
 	if (write == true && page->writable != true) {
-		free(page);
 		goto err;
 	}
 	return vm_do_claim_page (page);
 
 	/* 검증에 걸린 폴트가 오는 곳이에요. 여기서 어떻게 처리할지는 아직 정하는 중이에요. */
 	err:
-	// kill?
-	ASSERT("INVALIDATE")
-	return NULL;
+	supplemental_page_table_kill(spt);
+	return false;
 }
 
 /* Free the page.
