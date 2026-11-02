@@ -277,6 +277,11 @@ process_exec (void *f_name) {
 	/* 먼저 지금 문맥을 없애요 */
 	process_cleanup ();
 
+	#ifdef VM
+	/* 새 프로그램의 페이지를 등록할 수 있도록 빈 SPT를 준비한다. */
+	supplemental_page_table_init(&curr->spt);
+	#endif
+
 	/* 명령줄을 공백 기준으로 쪼개요. arg[0]은 프로그램 이름이고, arg[1]부터 인수예요.
 	 * 명령줄은 128바이트까지라서 단어는 많아야 64개예요. 그래서 칸을 64개 잡았어요. */
 	char *arg[64] = {0};

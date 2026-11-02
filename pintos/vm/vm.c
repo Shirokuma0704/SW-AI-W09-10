@@ -242,9 +242,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	return vm_do_claim_page (page);
 
-	/* 검증에 걸린 폴트가 오는 곳이에요. 여기서 어떻게 처리할지는 아직 정하는 중이에요. */
+	/* 검증에 걸린 폴트가 오는 곳이에요. */
 	err:
-	supplemental_page_table_kill(spt);
 	return false;
 }
 
@@ -391,11 +390,23 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 }
 
-/* Free the resource hold by the supplemental page table */
+/* hash_destroy()가 해시 원소마다 호출하는 정리 콜백이다. */
+static void
+page_destroy(struct hash_elem *e, void *aux UNUSED) {
+
+	/* 해시 원소의 주소로, 그것을 포함한 page의 주소를 구한다. */
+	struct page *page = hash_entry(e, struct page, hash_elem);
+
+	/* 페이지의 자원을 정리하고 page 구조체를 해체한다. */
+	vm_dealloc_page(page);
+}
+
+/* SPT에 등록된 모든 페이지와 해시 테이블의 버킷 공간을 정리한다. */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
+	/* hash_destroy()가 원소마다 page_destroy()를 호출하고,
+	 * 마지막으로 해시 테이블의 버킷 공간을 해제한다. */
+	hash_destroy(&spt->page_tables, page_destroy);
 }
 
 /* SPT 해시 함수예요. va 값만 해시해요.
