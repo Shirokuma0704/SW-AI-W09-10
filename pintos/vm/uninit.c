@@ -10,6 +10,7 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include "threads/malloc.h" /* 컴파일러가 free()의 선언을 알 수 있도록 넣습니다. */
 
 static bool uninit_initialize (struct page *page, void *kva);
 static void uninit_destroy (struct page *page);
@@ -56,13 +57,18 @@ uninit_initialize (struct page *page, void *kva) {
 		   (init ? init (page, aux) : true);
 }
 
-/* Free the resources hold by uninit_page. Although most of pages are transmuted
- * to other page objects, it is possible to have uninit pages when the process
- * exit, which are never referenced during the execution.
- * PAGE will be freed by the caller. */
+/* uninit 페이지가 보유한 자원을 해제한다.
+ * 대부분의 페이지는 초기화되면서 다른 페이지 타입으로 바뀌지만,
+ * 실행 중 한 번도 접근하지 않은 페이지는 프로세스가 종료될 때까지
+ * uninit 상태로 남을 수 있다.
+ * page 구조체 자체는 호출자가 해제한다. */
 static void
-uninit_destroy (struct page *page) {
-	struct uninit_page *uninit UNUSED = &page->uninit;
-	/* TODO: Fill this function.
-	 * TODO: If you don't have anything to do, just return. */
+uninit_destroy (struct page *page)
+{
+	/* 이 페이지에 보관된 초기화 정보에 접근한다. */
+	struct uninit_page *uninit = &page->uninit;
+
+	/* 나중에 페이지를 초기화하려고 보관했던 정보를 해제한다. */
+	if (uninit->aux != NULL)
+		free(uninit->aux);
 }
