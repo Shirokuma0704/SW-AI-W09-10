@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -27,6 +28,8 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+static struct list sleep_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -108,6 +111,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -210,12 +214,14 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* Puts the current thread to sleep.  It will not be scheduled
-   again until awoken by thread_unblock().
+/* 현재 실행 중인 스레드를 대기(sleep) 상태로 만든다.
+   thread_unblock()에 의해 깨워질 때까지
+   다시 스케줄링되지 않는다.
 
-   This function must be called with interrupts turned off.  It
-   is usually a better idea to use one of the synchronization
-   primitives in synch.h. */
+   이 함수는 반드시 인터럽트가 비활성화된 상태에서 호출해야 한다.
+
+   일반적으로는 synch.h에 정의된 동기화 기본 요소 중
+   하나를 사용하는 것이 더 바람직하다. */
 void
 thread_block (void) {
 	ASSERT (!intr_context ());
@@ -224,14 +230,33 @@ thread_block (void) {
 	schedule ();
 }
 
-/* Transitions a blocked thread T to the ready-to-run state.
-   This is an error if T is not blocked.  (Use thread_yield() to
-   make the running thread ready.)
+void
+thread_sleep (int64_t ticks) {
+	if(ticks <= 0){
+		return;
+	}
+	struct thread *curr = thread_current ();
+	enum intr_level old_level = intr_disable();
+	curr -> wakeup_tick = timer_ticks () + ticks;
 
-   This function does not preempt the running thread.  This can
-   be important: if the caller had disabled interrupts itself,
-   it may expect that it can atomically unblock a thread and
-   update other data. */
+	list_push_back (&sleep_list, &curr->elem);
+	thread_block();
+	intr_set_level (old_level);
+}
+
+/* 차단(blocked) 상태인 스레드 T를
+   실행 가능한 준비(ready-to-run) 상태로 전환한다.
+
+   T가 차단 상태가 아니라면 오류가 발생한다.
+   (현재 실행 중인 스레드를 준비 상태로 만들려면
+   thread_yield()를 사용한다.)
+
+   이 함수는 현재 실행 중인 스레드를 선점(preempt)하지 않는다.
+
+   이는 중요한 특성일 수 있다.
+   호출자가 직접 인터럽트를 비활성화한 상태라면,
+   스레드의 차단을 해제하고 다른 데이터를 갱신하는 작업을
+   원자적으로(atomic) 수행할 수 있다고 기대할 수 있기 때문이다. */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -251,18 +276,21 @@ thread_name (void) {
 	return thread_current ()->name;
 }
 
-/* Returns the running thread.
-   This is running_thread() plus a couple of sanity checks.
-   See the big comment at the top of thread.h for details. */
+/* 현재 실행 중인 스레드를 반환한다.
+   running_thread()에 몇 가지 유효성 검사(sanity check)를 추가한 함수이다.
+   자세한 내용은 thread.h 파일 맨 위에 있는
+   긴 주석을 참고하라. */
 struct thread *
 thread_current (void) {
 	struct thread *t = running_thread ();
 
-	/* Make sure T is really a thread.
-	   If either of these assertions fire, then your thread may
-	   have overflowed its stack.  Each thread has less than 4 kB
-	   of stack, so a few big automatic arrays or moderate
-	   recursion can cause stack overflow. */
+/* T가 실제로 스레드인지 확인한다.
+   아래 두 assert 중 하나라도 실패한다면,
+   스레드의 스택이 오버플로되었을 가능성이 있다.
+
+   각 스레드에는 4KB 미만의 스택 공간만 할당되므로,
+   크기가 큰 지역 배열을 몇 개 선언하거나
+   적당한 수준의 재귀 호출만으로도 스택 오버플로가 발생할 수 있다. */
 	ASSERT (is_thread (t));
 	ASSERT (t->status == THREAD_RUNNING);
 
