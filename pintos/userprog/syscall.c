@@ -445,6 +445,12 @@ check_user_memory(char *p,struct thread *cur){
 	if(is_kernel_vaddr(p)){
 			sys_exit(-1);
 		}
+	/* lazy loading이라 아직 한 번도 안 건드린 유저 페이지는 pml4에 없어요.
+	 * 그래서 pml4 검사 전에 한 번 읽어서 page fault를 내요.
+	 * SPT에 있는 주소면 vm_try_handle_fault가 프레임을 올려서 pml4에 매핑해 줘요.
+	 * SPT에 없는 주소면 page_fault()에서 프로세스가 exit(-1)로 끝나요.
+	 * 읽은 값은 안 쓰니까, volatile이 없으면 컴파일러가 이 읽기를 지울 수 있어요. */
+	volatile char a = *p;
 	if(pml4_get_page(cur->pml4,p)==NULL){
 		sys_exit(-1);
 	}
