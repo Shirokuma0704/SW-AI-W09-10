@@ -244,6 +244,22 @@ thread_sleep (int64_t ticks) {
 	intr_set_level (old_level);
 }
 
+void
+thread_wakeup(int64_t ticks){
+	struct list_elem *e = list_begin(&sleep_list);
+	
+	while (e != list_end (&sleep_list))
+	{
+		struct list_elem *next = list_next(e);
+		struct thread *t = list_entry(e, struct thread, elem);
+		if(t->wakeup_tick <= ticks){
+			list_remove(e);
+			thread_unblock(t);
+		}		
+		e=next;
+	}
+}
+
 /* 차단(blocked) 상태인 스레드 T를
    실행 가능한 준비(ready-to-run) 상태로 전환한다.
 
@@ -254,7 +270,7 @@ thread_sleep (int64_t ticks) {
    이 함수는 현재 실행 중인 스레드를 선점(preempt)하지 않는다.
 
    이는 중요한 특성일 수 있다.
-   호출자가 직접 인터럽트를 비활성화한 상태라면,
+   호출자가 직접 인터럽트를 비활성화한 상태라면,grep -h 'PASS' tests/threads/*.result | wc -l
    스레드의 차단을 해제하고 다른 데이터를 갱신하는 작업을
    원자적으로(atomic) 수행할 수 있다고 기대할 수 있기 때문이다. */
 void
@@ -446,10 +462,28 @@ init_thread (struct thread *t, const char *name, int priority) {
    idle_thread. */
 static struct thread *
 next_thread_to_run (void) {
-	if (list_empty (&ready_list))
+	if(list_empty(&ready_list)){
 		return idle_thread;
-	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+	}
+	else{
+		struct thread *highest = NULL;
+		struct list_elem *e;
+
+		for(e = list_begin(&ready_list); e != list_end(&ready_list); e = list_next(e)){
+			struct thread *t = list_entry(e,struct thread, elem);
+			if(highest == NULL || t  -> priority > highest -> priority){
+				highest  = t;
+			}
+			
+		}
+		list_remove(&highest->elem);
+		return highest;
+		
+	}
+	// if (list_empty (&ready_list))
+	// 	return idle_thread;
+	// else
+	// 	return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
