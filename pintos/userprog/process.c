@@ -1012,28 +1012,28 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-/* USER_STACK에 스택 페이지(PAGE) 하나를 만들어요. 성공하면 true를 돌려줘요. */
+/* 첫 스택 페이지를 등록하고, 실제로 사용할 준비까지 마친다. */
 static bool
-setup_stack (struct intr_frame *if_) {
-	bool success = false;
-	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
+setup_stack(struct intr_frame *if_)
+{
+    bool success = false;
+    void *stack_bottom =
+        (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-	/* TODO: stack_bottom에 스택을 매핑하고 그 페이지를 바로 claim 해요.
-	 * TODO: 성공하면 그에 맞게 rsp를 설정해요.
-	 * TODO: 그 페이지가 스택이라는 표시를 해 둬야 해요. */
-	/* TODO: 여기에 코드를 써요 */
-	/* VM_MARKER_0은 "이 페이지는 스택"이라는 표시예요.
-	 * 스택은 load가 곧바로 인자를 쌓아야 해서, 첫 폴트를 기다리지 않고 바로 claim 해요. */
-	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true) == true)
-	{
-		vm_claim_page(stack_bottom);
-		/* 스택은 아래로 자라요. push는 rsp를 먼저 빼고 그 자리에 쓰니까,
-		 * 페이지 꼭대기(stack_bottom + PGSIZE = USER_STACK)에서 출발해야 첫 push도 페이지 안에 들어가요. */
-		if_ -> rsp = (uintptr_t)stack_bottom + PGSIZE;
-		success = true;
-	}
+    /* 첫 스택 페이지를 쓰기 가능한 익명 페이지로 등록한다. */
+    if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true) == true) {
+        /* 프로그램 인자를 곧바로 써야 하므로 즉시 claim한다.
+         * 실패하면 rsp를 설정하거나 성공으로 처리하지 않는다. */
+        if (vm_claim_page(stack_bottom) == false)
+            return false;
 
+        /* 첫 push는 rsp를 먼저 내리고 값을 쓰므로,
+         * 페이지 꼭대기에서 시작하도록 설정한다. */
+        if_->rsp = (uintptr_t)stack_bottom + PGSIZE;
+        success = true;
+    }
 
-	return success;
+    /* 등록 실패면 false, 등록과 claim 모두 성공했다면 true다. */
+    return success;
 }
 #endif /* VM */

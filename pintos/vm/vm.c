@@ -192,9 +192,16 @@ vm_get_frame (void) {
 		return NULL;
 }
 
-/* Growing the stack. */
+/* 스택 확장 조건을 통과한 주소에 새 페이지를 등록한다.
+ * addr는 호출자가 페이지 시작 주소로 정렬하여 전달한다.
+ * 실제 프레임 확보와 매핑은 호출자 쪽 claim 경로에서 수행한다. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    /* 익명 페이지이며 스택이라는 표시를 붙이고, 쓰기를 허용한다.
+     * 등록에 실패하면 여기서 돌아간다.
+     * 호출자는 SPT를 재조회하여 등록 성공 여부를 확인한다. */
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, true) == false)
+		return;
 }
 
 /* Handle the fault on write_protected page */
@@ -202,59 +209,79 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
 
-/* Return true on success */
+/* 폴트를 복구하면 true, 복구할 수 없으면 false를 반환한다. */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	/* 폴트 주소는 페이지 중간일 수도 있어요. SPT 키는 페이지 시작 주소라서,
-	 * 아래 12비트를 지워(pg_round_down) 시작 주소로 내린 뒤에 찾아요. 예: 0x400a3c → 0x400000
-	 * va는 포인터가 아니라 주소 "값"으로 들고 있어요. 포인터로 두고 *va를 하면 그 주소의 "내용"을 읽게 돼요.
-	 * 아직 안 올라온 페이지라 핸들러 안에서 폴트가 한 번 더 나고, 같은 페이지를 두 번 claim해요.
-	 * (11-02 args-none: 두 번째 claim이 빈 프레임을 덮어 매핑해서 _start가 0으로 채워져 있었어요.) */
-	uintptr_t va = (uintptr_t) pg_round_down(addr);
-	uintptr_t address = (uintptr_t) addr;
-	/* 스택 크기 한도예요. 이 프로젝트는 스택을 최대 1MB까지만 키워요 (위키 4절 "스택 크기 한도"). */
-	uintptr_t mb = (1 << 20);
+vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
+                    bool user UNUSED, bool write UNUSED,
+                    bool not_present UNUSED)
+{
+    struct supplemental_page_table *spt = &thread_current()->spt;
+    struct page *page = NULL;
 
-	/* 폴트 검증이에요. 아직 작성 중이에요.
-	 * 순서대로 ① 유저 폴트가 커널 주소를 건드렸는지, ② SPT에 없는 주소인지 (스택 확장 후보 자리),
-	 * ③ 읽기 전용 페이지에 쓰려고 했는지를 봐요. 걸리면 err로 가요. */
-	/* ① 유저 프로그램의 주소는 모두 KERN_BASE 아래에 있어요 (코드는 0x400000부터, lib/user/user.lds).
-	 * 그래서 유저 폴트인데 주소가 KERN_BASE보다 크면 유저가 커널 영역을 건드린 거라 err로 보내요. */
-	if (user == true && va > (uintptr_t) KERN_BASE) goto err;
+    /* SPT 검색·페이지 등록에는 정렬된 주소를 사용한다. */
+    uintptr_t va = (uintptr_t)pg_round_down(addr);
 
-	/* ② SPT에서 찾을 때는 va 값을 그대로 넘겨요. &va를 넘기면 지역 변수 va가 놓인 커널 스택 주소로
-	 * 찾게 돼서 항상 NULL이 나와요 (uninit_new 쪽 &p 주석과 같은 함정이에요). */
-	page = spt_find_page(spt, (void *)va);
+    /* 스택 접근의 타당성은 실제 폴트가 난 원래 주소로 판단한다. */
+    uintptr_t address = (uintptr_t)addr;
 
-	if (page == NULL)
-	{
-		/* SPT에 없는 주소면 스택 확장 후보예요. 세 조건을 다 만족해야 키워요.
-		 * - rsp - 8 이상: PUSH는 rsp를 줄이기 전에 쓸 자리부터 검사해서 rsp보다 8바이트 아래에서 폴트가 나요.
-		 *   그보다 아래는 아직 아무도 안 쓰는 빈 공간이라 스택 접근으로 안 봐요.
-		 * - USER_STACK - 1MB 이상, USER_STACK 미만: 스택 크기 한도 1MB를 꼭대기(USER_STACK) 기준으로 재요.
-		 *   rsp 기준으로 재면 한도가 rsp를 따라 같이 내려가서 막지 못해요.
-		 * 판정은 원래 주소(address)로 하고, 할당은 페이지 시작(va)으로 해요.
-		 * va로 판정하면 최대 4KB 아래로 끌려 내려가서 정상인 rsp - 8 폴트도 떨어져요.
-		 * 아직 할 것: vm_stack_growth 본문, 키운 뒤의 반환(지금은 goto err라 늘 false),
-		 *            시스템 콜 도중 폴트일 때의 유저 rsp (그때 f->rsp는 커널 스택이에요). */
-		if (f->rsp - 8 <= address && USER_STACK - mb <= address && address < USER_STACK)
-			vm_stack_growth((void *)va);
-		goto err;
-	}
+    /* USER_STACK을 기준으로 스택을 최대 1MiB까지 허용한다. */
+    uintptr_t mb = (1 << 20);
 
-	if (write == true && page->writable != true) {
-		goto err;
-	}
-	return vm_do_claim_page (page);
+    uintptr_t rsp;
 
-	/* 검증에 걸린 폴트가 오는 곳이에요. */
-	err:
-	return false;
+    /* 사용자 모드 폴트에서는 프레임의 사용자 rsp를 사용한다.
+     * 커널 모드에서 사용자 메모리에 접근하다 발생한 폴트라면,
+     * 시스템 콜 진입 때 저장한 사용자 rsp를 사용한다. */
+    if (user == true)
+        rsp = f->rsp;
+    else
+        rsp = thread_current()->user_rsp;
+
+    /* NULL과 커널 영역 주소는 사용자 페이지로 복구하지 않는다. */
+    if (addr == NULL || va >= (uintptr_t)KERN_BASE)
+        goto err;
+
+    /* 현재 단계에서는 권한 위반 폴트를 복구하지 않는다.
+     * 매핑이 없는 페이지에 대한 폴트만 다음 단계로 진행한다. */
+    if (not_present == false)
+        goto err;
+
+    /* 첫 조회: 이미 등록된 페이지인지 확인한다. */
+    page = spt_find_page(spt, (void *)va);
+
+    if (page == NULL) {
+        /* 등록된 페이지가 없으면 스택 확장 후보인지 검사한다.
+         * - 사용자 rsp보다 최대 8바이트 아래까지 허용
+         * - USER_STACK 아래 최대 1MiB 영역으로 제한
+         * - USER_STACK 자체와 그 위는 제외
+         *
+         * 조건을 통과한 경우에만 새 스택 페이지를 등록한다. */
+        if (rsp - 8 <= address &&
+            USER_STACK - mb <= address &&
+            address < USER_STACK) {
+            vm_stack_growth((void *)va);
+        }
+
+        /* 재조회: 확장 함수가 돌아와도 지역변수 page는
+         * 자동으로 바뀌지 않으므로 등록 결과를 다시 얻는다. */
+        page = spt_find_page(spt, (void *)va);
+
+        /* 확장이 거부됐거나 등록에 실패했다면 복구할 수 없다. */
+        if (page == NULL)
+            goto err;
+    }
+
+    /* 기존 페이지와 새 스택 페이지 모두 같은 권한 검사를 거친다. */
+    if (write == true && page->writable != true)
+        goto err;
+
+    /* 확보한 page에 프레임을 연결하고 매핑·내용 초기화를 수행한다.
+     * 그 작업의 성공 여부를 폴트 처리 결과로 반환한다. */
+    return vm_do_claim_page(page);
+
+err:
+    /* 전체 자원 정리는 종료 경로에 맡기고 실패만 알린다. */
+    return false;
 }
 
 /* Free the page.

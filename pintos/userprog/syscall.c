@@ -57,6 +57,11 @@ syscall_init (void) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
+	/* 사용자 메모리에 접근하기 전에 사용자 rsp를 보관한다.
+	 * 시스템 콜 처리 중 발생한 폴트의 프레임에서는
+	 * 원래 사용자 rsp를 얻을 수 없으므로 진입 시점에 저장한다. */
+	thread_current()->user_rsp = f->rsp;
+
 	// TODO: Your implementation goes here.
 	switch(f->R.rax){
 		case SYS_WRITE:
@@ -274,7 +279,52 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			bool found=false;
 
 			struct list *fd_list=&thread_current()->fdt->fd_list;
-			check_user_memory_with_size(buffer,size);
+			uintptr_t start = (uintptr_t)buffer;
+
+			/* 사용자 영역 밖으로 넘어가는 버퍼를 거부한다.
+			 * start + size를 먼저 계산하면 주소가 넘칠 수 있으므로,
+			 * 사용자 영역 끝까지 남은 크기와 비교한다.
+			 * ||의 앞 조건이 참이면 뒤 조건은 평가하지 않는다. */
+			if (size > 0 &&
+				(start == 0 ||
+				start >= (uintptr_t)KERN_BASE ||
+				(uintptr_t)size > (uintptr_t)KERN_BASE - start)) {
+				sys_exit(-1);
+			}
+
+			/* 기존 접근 가능 여부 검사 */
+			check_user_memory_with_size(buffer, size);
+
+			#ifdef VM
+			/* 크기가 0이면 마지막 바이트 계산과 쓰기 권한 검사를 건너뛴다. */
+			if (size > 0) {
+				/* 버퍼가 실제로 사용하는 마지막 바이트 주소다. */
+				uintptr_t last_byte = start + size - 1;
+
+				/* SPT는 페이지 시작 주소를 키로 사용하므로,
+				 * 시작 바이트와 마지막 바이트를 각각 페이지 경계로 내린다. */
+				uintptr_t first_page =
+					(uintptr_t)pg_round_down(buffer);
+				uintptr_t last_page =
+					(uintptr_t)pg_round_down((void *)last_byte);
+
+				struct supplemental_page_table *spt = &thread_current()->spt;
+
+				/* 첫 페이지부터 마지막 페이지까지 페이지 단위로 검사한다. */
+				for (uintptr_t page_addr = first_page;
+					page_addr <= last_page;
+					page_addr += PGSIZE) {
+
+					struct page *page = spt_find_page(spt, (void *)page_addr);
+
+					/* read는 파일에서 읽지만, 사용자 버퍼에는 데이터를 쓴다.
+					 * 따라서 목적지 페이지가 존재하고 쓰기 가능해야 한다.
+					 * page가 NULL이면 || 뒤는 실행하지 않으므로 역참조하지 않는다. */
+					if (page == NULL || page->writable == false)
+						sys_exit(-1);
+				}
+			}
+			#endif
 
 			if(fd_list==NULL){
 				break;
