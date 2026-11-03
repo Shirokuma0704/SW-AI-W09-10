@@ -216,6 +216,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	 * 아직 안 올라온 페이지라 핸들러 안에서 폴트가 한 번 더 나고, 같은 페이지를 두 번 claim해요.
 	 * (11-02 args-none: 두 번째 claim이 빈 프레임을 덮어 매핑해서 _start가 0으로 채워져 있었어요.) */
 	uintptr_t va = (uintptr_t) pg_round_down(addr);
+	uintptr_t address = (uintptr_t) addr;
 	/* 스택 크기 한도예요. 이 프로젝트는 스택을 최대 1MB까지만 키워요 (위키 4절 "스택 크기 한도"). */
 	uintptr_t mb = (1 << 20);
 
@@ -232,8 +233,17 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	if (page == NULL)
 	{
-		if (f->rsp - PGSIZE > va && f->rsp - PGSIZE - mb > va)
-			ASSERT("todo");
+		/* SPT에 없는 주소면 스택 확장 후보예요. 세 조건을 다 만족해야 키워요.
+		 * - rsp - 8 이상: PUSH는 rsp를 줄이기 전에 쓸 자리부터 검사해서 rsp보다 8바이트 아래에서 폴트가 나요.
+		 *   그보다 아래는 아직 아무도 안 쓰는 빈 공간이라 스택 접근으로 안 봐요.
+		 * - USER_STACK - 1MB 이상, USER_STACK 미만: 스택 크기 한도 1MB를 꼭대기(USER_STACK) 기준으로 재요.
+		 *   rsp 기준으로 재면 한도가 rsp를 따라 같이 내려가서 막지 못해요.
+		 * 판정은 원래 주소(address)로 하고, 할당은 페이지 시작(va)으로 해요.
+		 * va로 판정하면 최대 4KB 아래로 끌려 내려가서 정상인 rsp - 8 폴트도 떨어져요.
+		 * 아직 할 것: vm_stack_growth 본문, 키운 뒤의 반환(지금은 goto err라 늘 false),
+		 *            시스템 콜 도중 폴트일 때의 유저 rsp (그때 f->rsp는 커널 스택이에요). */
+		if (f->rsp - 8 <= address && USER_STACK - mb <= address && address < USER_STACK)
+			vm_stack_growth((void *)va);
 		goto err;
 	}
 
