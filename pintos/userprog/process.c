@@ -228,8 +228,9 @@ __do_fork (void *aux) {
 	/* 부모 running_file은 NULL이 아니에요. fork를 부르는 건 load가 성공한 유저 프로그램뿐이라서요.
 	 * 그래서 여기서 NULL이 오는 건 file_open 안의 calloc이 실패했을 때뿐이에요.
 	 * 그대로 진행하면 아래 SPT 복사가 자식 aux->file에 NULL을 넣고, 자식의 첫 폴트에서
-	 * lazy_load_segment의 file_read_at(NULL)이 커널 NULL 역참조를 내요. 주소가 유저 영역(0 근처)이라
-	 * page_fault()에서 조용한 exit(-1)로 끝나서, fork 실패가 한참 뒤 엉뚱한 곳의 종료로 보여요.
+	 * lazy_load_segment의 file_read_at(NULL)이 NULL->inode를 읽어요. inode가 struct file의 첫 멤버라 주소가 정확히 0이에요.
+	 * 커널에서 난 0번지 fault라 kill()에서 "unexpected interrupt in kernel" 패닉이 나서,
+	 * fork 실패가 한참 뒤 자식의 첫 폴트에서 엉뚱한 패닉으로 보여요.
 	 * 그래서 실패를 여기서 바로 알려요. error:에서 끝나는 건 덜 만든 자식뿐이고, 부모는 fork()에서 -1을 받아요. */
 	if (new_file == NULL) goto error;
 	current->running_file = new_file;
