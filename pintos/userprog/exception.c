@@ -146,9 +146,8 @@ page_fault (struct intr_frame *f) {
 	 * 주소가 커널 영역이면 그대로 아래로 내려가요. 커널 코드에서 났으면 진짜 커널 버그라 패닉이에요.
 	 * 참고: 커널 코드의 NULL 역참조 같은 버그도 주소가 유저 영역(0)이라 여기서 exit(-1)로 끝나요.
 	 *       그런 버그는 패닉 대신 조용한 exit(-1)로 보일 수 있어요. */
-	if (is_user_vaddr(fault_addr) == true)
+	if (is_user_vaddr(fault_addr) == true && fault_addr != NULL)
 	{
-		f->R.rax = -1;
 		thread_exit();
 	}
 
