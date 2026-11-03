@@ -138,6 +138,23 @@ page_fault (struct intr_frame *f) {
 		return;
 #endif
 
+	/* vm_try_handle_fault가 못 살린 fault 중에 주소가 유저 영역이면, 프로세스만 끝내요.
+	 * 시스템 콜 안에서 커널이 유저가 넘긴 주소를 읽다가 난 fault도 여기로 와요(user == false).
+	 * 그건 커널 버그가 아니라 유저가 잘못된 주소를 준 거라서, 아래 kill()로 보내면 안 돼요.
+	 * kill()은 cs를 보고 커널에서 난 fault면 패닉을 내요(create-bad-ptr에서 그랬어요).
+	 * 종료 코드 -1은 process_exit에서 exit_called가 false인 걸 보고 정해져요.
+	 * 주소가 커널 영역이면 그대로 아래로 내려가요. 커널 코드에서 났으면 진짜 커널 버그라 패닉이에요.
+	 * 주소가 NULL이면 유저 영역이어도 여기서 빼고 아래 kill()로 보내요.
+	 * 커널 코드의 NULL 역참조 버그가 조용한 exit(-1)로 숨지 않고 패닉으로 보이게 하려고요.
+	 * 유저 프로그램의 NULL 역참조는 kill()의 유저 경로에서 그대로 exit(-1)로 끝나고,
+	 * 시스템 콜에 넘긴 NULL은 check_user_memory 전에 syscall.c에서 먼저 걸러져서 여기까지 안 와요.
+	 * 그래서 이 조건이 막는 건 커널 버그뿐이에요. */
+	if (is_user_vaddr(fault_addr) == true && fault_addr != NULL)
+	{
+		thread_exit();
+	}
+
+
 	/* page fault 개수를 세요. */
 	page_fault_cnt++;
 
