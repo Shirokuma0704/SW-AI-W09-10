@@ -281,8 +281,16 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
+	list_push_back (&ready_list, &t->elem);
+	if(t->priority > thread_current()->priority){
+		if(intr_context()){
+			intr_yield_on_return();
+		}
+		else{
+			thread_yield();
+		}
+	}
 	intr_set_level (old_level);
 }
 
@@ -356,6 +364,18 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	struct thread *highest = NULL;
+	struct list_elem *e;
+
+	for(e = list_begin(&ready_list); e != list_end(&ready_list); e = list_next(e)){
+		struct thread *t = list_entry(e,struct thread, elem);
+		if(highest != NULL && t  -> priority > highest -> priority){
+				highest  = t;
+		}	
+	}
+	if(highest->priority > thread_current()->priority){
+		thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */
