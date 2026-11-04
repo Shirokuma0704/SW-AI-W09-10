@@ -122,6 +122,11 @@ struct thread {
 	struct semaphore fork_sema;			// 부모가 fork 안에서 자식의 복제가 끝날 때까지 잠드는 세마포어. 자식이 up해서 깨워요
 	tid_t fork_result;					// 자식이 적어 주는 fork 결과. 성공이면 자식 tid, 실패면 TID_ERROR
 
+	/* 시스템 콜 진입 시점의 사용자 스택 포인터를 보관한다.
+	 * 커널에서 사용자 메모리에 접근하다 폴트가 발생하면,
+	 * 이 값을 스택 확장 판단의 기준으로 사용한다.
+	 * 스레드마다 자신의 값을 따로 보관한다. */
+	uintptr_t user_rsp;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
