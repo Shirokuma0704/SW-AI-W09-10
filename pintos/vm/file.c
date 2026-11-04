@@ -109,8 +109,9 @@ do_munmap (void *addr) {
 	}
 	return true;
 
-	/* TODO: 예외 처리는 자리만 만들어 뒀어요. 검사는 munmap syscall에서 거르기로 했고,
-	 * PANIC은 커널 전체를 멈추니까 나중에 바꿔야 해요. */
+	/* 잘못된 addr는 여기서 걸러서 false만 돌려줘요. 프로세스를 끝낼지는 munmap syscall이 정해요(exit(-1)).
+	 * PANIC은 커널 전체를 멈춰서, 유저가 잘못 넘긴 주소에 쓰기엔 너무 세요.
+	 * 반복문 중간에 실패해서 앞쪽만 풀렸어도, exit 뒤 supplemental_page_table_kill이 나머지를 치워요. */
 	err:
 	return false;
 }
