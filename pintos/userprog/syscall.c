@@ -413,7 +413,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = tid;
 		break;
 	}
-			
+#ifdef VM
+	case SYS_MUNMAP: {
+		if (!do_munmap((void *)f->R.rdi)) sys_exit(-1);
+		break;
+		}
+	
+#endif
+
 	}
 
 	// printf ("system call!\n");

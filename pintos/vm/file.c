@@ -59,7 +59,7 @@ do_mmap (void *addr, size_t length, int writable,
 /* addr에서 시작하는 매핑 하나를 통째로 풀어요.
  * addr는 mmap이 돌려준 주소라서 항상 매핑의 첫 페이지 va예요.
  * 매핑이 몇 장인지는 첫 페이지 aux의 page_cnt에만 적혀 있어요. */
-void
+bool
 do_munmap (void *addr) {
 	struct thread *curr = thread_current();
 	struct page *p = va_to_page(addr);
@@ -107,10 +107,11 @@ do_munmap (void *addr) {
 		 * 한 번도 안 읽은 페이지는 pml4에 없지만, pml4_clear_page는 그래도 괜찮아요. */
 		pml4_clear_page(curr->pml4, addr + (n * PGSIZE));
 	}
-	return;
+	return true;
 
-	/* TODO: 예외 처리는 자리만 만들어 뒀어요. 검사는 munmap syscall에서 거르기로 했고,
-	 * PANIC은 커널 전체를 멈추니까 나중에 바꿔야 해요. */
+	/* 잘못된 addr는 여기서 걸러서 false만 돌려줘요. 프로세스를 끝낼지는 munmap syscall이 정해요(exit(-1)).
+	 * PANIC은 커널 전체를 멈춰서, 유저가 잘못 넘긴 주소에 쓰기엔 너무 세요.
+	 * 반복문 중간에 실패해서 앞쪽만 풀렸어도, exit 뒤 supplemental_page_table_kill이 나머지를 치워요. */
 	err:
-	PANIC("hmm");
+	return false;
 }
