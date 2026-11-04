@@ -43,6 +43,7 @@ struct aux {
     off_t ofs;                      // 파일 안에서 읽기 시작할 위치
     uint8_t *upage;                 // 이 페이지의 유저 가상 주소
     bool writable;                  // 유저가 이 페이지에 쓸 수 있는지
+    int page_cnt;                   // mmap 매핑 하나가 차지하는 페이지 수. 매핑의 첫 페이지 aux에서만 의미가 있어요 (munmap이 첫 페이지 주소로 들어와서요)
 };
 
 
