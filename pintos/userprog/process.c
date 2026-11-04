@@ -953,10 +953,12 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* 요청한 만큼 다 못 읽었으면 실패예요. */
 	if (bytes_read != aux_r->read_bytes)
 	{
+		if (page->operations->type == VM_ANON) free(aux);
 		return false;
 	}
 	/* 읽은 바로 뒤부터 페이지 끝까지는 0으로 채워요. */
 	memset(kva + aux_r->read_bytes, 0, aux_r->zero_bytes);
+	if (page->operations->type == VM_ANON) free(aux);
 	return true;
 }
 
