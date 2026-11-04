@@ -464,6 +464,20 @@ bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux U
 	return true;
 }
 
+struct page*
+va_to_page(void *va) {
+	struct thread *curr = thread_current();
+	struct page *p = malloc(sizeof(struct page));
+	p->va = va;
+
+	struct hash_elem *elem = hash_find(&curr->spt.page_tables, &p->hash_elem);
+	free(p);
+
+	if (elem == NULL) return NULL;
+
+	return hash_entry(elem, struct page, hash_elem);
+}
+
 // struct hash_elem *
 	// vm_to_hash_elem(struct supplemental_page_table *spt, void *va) {
 	// struct hash_iterator i;
