@@ -464,13 +464,17 @@ bool page_less (const struct hash_elem *a,const struct hash_elem *b, void *aux U
 	return true;
 }
 
+/* 현재 스레드의 SPT에서 va에 해당하는 page를 찾아요. 없으면 NULL이에요.
+ * va는 페이지 경계에 맞는 값이어야 해요. 해시가 va를 그대로 비교해서, 경계에서 어긋나면 못 찾아요. */
 struct page*
 va_to_page(void *va) {
 	struct thread *curr = thread_current();
+	/* 찾기용 임시 page예요. 해시와 비교 함수가 va만 보니까 va만 채워요. */
 	struct page *p = malloc(sizeof(struct page));
 	p->va = va;
 
 	struct hash_elem *elem = hash_find(&curr->spt.page_tables, &p->hash_elem);
+	/* 찾았든 못 찾았든 임시 page는 여기서 free해요. return보다 먼저 해야 두 경로 다 새지 않아요. */
 	free(p);
 
 	if (elem == NULL) return NULL;
